@@ -25,7 +25,7 @@ public class MainActivity extends Activity {
     }
     static class ScanRow {
         String symbol,name,market,signal,reasons;
-        double price,change,ema9,ema21,rsi,vwap,volRatio,volatility;
+        double price,change5m,dayChange,ema9,ema21,rsi,vwap,volRatio,volatility;
         int risk;
     }
 
@@ -47,8 +47,8 @@ public class MainActivity extends Activity {
     private Button btn(String s){ Button b=new Button(this); b.setText(s); return b; }
     private void buildUI(){
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,20,24,20);
-        root.addView(tv("Intraday Scanner V2",24,true));
-        root.addView(tv("5분 자동 분석 · Android 독립 앱",13,false));
+        root.addView(tv("Intraday Scanner V2.1",24,true));
+        root.addView(tv("5분 자동 분석 · 5분 변화 + 당일 변화",13,false));
 
         LinearLayout controls=new LinearLayout(this);controls.setOrientation(LinearLayout.HORIZONTAL);
         EditText sym=new EditText(this);sym.setHint("종목코드/티커");sym.setSingleLine(true);
@@ -120,7 +120,8 @@ public class MainActivity extends Activity {
             c.addView(tv(w.name+"  ·  "+w.symbol,18,true));
             if(r==null)c.addView(tv("데이터 대기 중",14,false));
             else{
-                c.addView(tv(String.format(Locale.KOREA,"%,.2f  (%+.2f%%)",r.price,r.change),24,true));
+                c.addView(tv(String.format(Locale.KOREA,"%,.2f",r.price),24,true));
+                c.addView(tv(String.format(Locale.KOREA,"5분 변화 %+.2f%%   ·   당일 변화 %+.2f%%",r.change5m,r.dayChange),14,true));
                 c.addView(tv("상태: "+label(r.signal)+"   위험 "+r.risk+"/10",14,true));
                 c.addView(tv(String.format(Locale.KOREA,"RSI %.1f · 거래량 %.1fx · EMA9 %.2f · EMA21 %.2f",r.rsi,r.volRatio,r.ema9,r.ema21),12,false));
                 c.addView(tv(r.reasons,13,false));
@@ -146,6 +147,7 @@ public class MainActivity extends Activity {
         StringBuilder sb=new StringBuilder();String line;while((line=br.readLine())!=null)sb.append(line);br.close();
         JSONObject root=new JSONObject(sb.toString());
         JSONObject result=root.getJSONObject("chart").getJSONArray("result").getJSONObject(0);
+        JSONObject meta=result.optJSONObject("meta");
         JSONObject q=result.getJSONObject("indicators").getJSONArray("quote").getJSONObject(0);
         JSONArray ca=q.getJSONArray("close"),ha=q.getJSONArray("high"),la=q.getJSONArray("low"),va=q.getJSONArray("volume");
         ArrayList<Double> close=new ArrayList<>(),high=new ArrayList<>(),low=new ArrayList<>(),vol=new ArrayList<>();
@@ -155,7 +157,15 @@ public class MainActivity extends Activity {
         }
         if(close.size()<25)throw new Exception("5분봉 부족");
         ScanRow r=new ScanRow();r.symbol=w.symbol;r.name=w.name;r.market=w.market;
-        int n=close.size();r.price=close.get(n-1);r.change=(r.price/close.get(n-2)-1)*100;
+        int n=close.size();
+        r.price=close.get(n-1);
+        r.change5m=(r.price/close.get(n-2)-1)*100;
+        double previousClose=0;
+        if(meta!=null){
+            previousClose=meta.optDouble("previousClose",0);
+            if(previousClose<=0) previousClose=meta.optDouble("chartPreviousClose",0);
+        }
+        r.dayChange=previousClose>0 ? (r.price/previousClose-1)*100 : 0;
         r.ema9=ema(close,9);r.ema21=ema(close,21);r.rsi=rsi(close,14);r.vwap=vwap(high,low,close,vol);r.volRatio=volRatio(vol);r.volatility=volatility(close);
         classify(r);return r;
     }
